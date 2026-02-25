@@ -9,7 +9,9 @@ This repo is for a tech stack where one hosts a self-hosted n8n instance, uses K
 
 One also needs to have set up the n8n-mcp (https://github.com/czlonkowski/n8n-mcp) and the skills related to that (https://github.com/czlonkowski/n8n-skills) and make sure those are fully installed on their agent. The main repo is the HTTP listener service that receives webhook calls from n8n error workflows and automatically spawns Kimi CLI to analyze and fix the errors. 
 
-One needs to set up a global error workflow at their n8n instance - and connect that to their workflows in production - and this becomes a self-healing system where the agent is able to autonomously try to fix the errors in the workflows. The agent, with the n8n-mcp server and the skills, is able to create the error workflow for you - but you need to set the error workflow connection manually.
+One needs to set up a global error workflow at their n8n instance - and connect that to their workflows in production - and this becomes a self-healing system where the agent is able to autonomously try to fix the errors in the workflows. The agent, with the n8n-mcp server and the skills, is able to create the error workflow for you - but you need to set the error workflow connection manually. There's an example JSON of an error workflow that works together with the HTTP listener in this repo as well.
+
+One also needs a way the agent can connect to email. In this case 
 
 ## Overview
 
