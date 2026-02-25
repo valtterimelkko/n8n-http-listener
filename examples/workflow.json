@@ -23,17 +23,10 @@
       "parameters": {
         "method": "POST",
         "url": "http://host.docker.internal:9876/fix-workflow",
-        "_url_comment": "For Linux Docker: use gateway IP from 'docker network inspect <network>' e.g., http://172.18.0.1:9876/fix-workflow"
+        "_url_comment": "For Linux Docker: use gateway IP from 'docker network inspect <network>' e.g., http://172.18.0.1:9876/fix-workflow",
         "sendBody": true,
-        "contentType": "json",
-        "body": {
-          "workflow_id": "={{ $json.workflow_id }}",
-          "workflow_name": "={{ $json.workflow_name }}",
-          "failed_node": "={{ $json.failed_node }}",
-          "error_message": "={{ $json.error_message }}",
-          "execution_id": "={{ $json.execution_id }}",
-          "execution_url": "={{ $json.execution_url }}"
-        },
+        "specifyBody": "json",
+        "jsonBody": "={\"workflow_id\": \"{{ $json.workflow_id }}\", \"workflow_name\": \"{{ $json.workflow_name }}\", \"failed_node\": \"{{ $json.failed_node }}\", \"error_message\": \"{{ $json.error_message }}\", \"execution_id\": \"{{ $json.execution_id }}\", \"execution_url\": \"{{ $json.execution_url }}\"}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
