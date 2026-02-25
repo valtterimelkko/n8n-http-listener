@@ -22,6 +22,19 @@ HOST = "0.0.0.0"
 LOG_FILE = "/var/log/n8n-auto-heal.log"
 KIMI_TIMEOUT_SECONDS = 600  # 10 minutes max for Kimi to fix
 
+def load_env_file(filepath="/root/n8n-http-listener/.env"):
+    """Load environment variables from .env file"""
+    if os.path.exists(filepath):
+        with open(filepath) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ.setdefault(key, value)
+
+# Load .env file
+load_env_file()
+
 # Paths (configurable via env vars)
 MCP_CONFIG = os.environ.get("MCP_CONFIG", "/root/n8n-integration/.claude/mcp.json")
 SKILLS_DIR = os.environ.get("SKILLS_DIR", "/root/.skills-global/skills-global")
