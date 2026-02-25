@@ -1,0 +1,37 @@
+[Unit]
+Description=n8n Auto-Heal HTTP Listener
+Documentation=https://github.com/yourusername/n8n-http-listener
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/n8n-http-listener
+
+# Environment - UPDATE THESE VALUES
+Environment="PATH=/root/.local/bin:/usr/bin:/bin"
+Environment="NOTIFICATION_EMAIL=your-email@example.com"
+Environment="GMAIL_EMAIL=your-email@example.com"
+Environment="GMAIL_APP_PASSWORD=your-app-password"
+Environment="HOME=/root"
+Environment="MCP_CONFIG=/path/to/mcp.json"
+Environment="SKILLS_DIR=/path/to/skills"
+
+# Main executable
+ExecStart=/usr/bin/python3 /opt/n8n-http-listener/listener.py
+
+# Restart policy
+Restart=always
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=3
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=n8n-auto-heal
+
+[Install]
+WantedBy=multi-user.target

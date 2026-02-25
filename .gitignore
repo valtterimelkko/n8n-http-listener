@@ -40,11 +40,15 @@ env/
 *.log
 logs/
 
-# Environment files (security critical)
+# Environment files (security critical) - Production only
 .env
 .env.local
 .env.*.local
 *.env
+
+# Production-only files (contain real credentials/paths)
+n8n-auto-heal.service
+# Note: Use examples/n8n-auto-heal.service.template for the public repo
 
 # Credentials and secrets (NEVER commit these)
 *credential*

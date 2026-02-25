@@ -6,6 +6,7 @@ Receives webhook calls from n8n error workflows and spawns Kimi CLI to fix them.
 
 import json
 import logging
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -21,10 +22,11 @@ HOST = "0.0.0.0"
 LOG_FILE = "/var/log/n8n-auto-heal.log"
 KIMI_TIMEOUT_SECONDS = 600  # 10 minutes max for Kimi to fix
 
-# Paths
-MCP_CONFIG = "/root/n8n-integration/.claude/mcp.json"
-SKILLS_DIR = "/root/.skills-global/skills-global"
-KIMI_BIN = "/root/.local/bin/kimi"
+# Paths (configurable via env vars)
+MCP_CONFIG = os.environ.get("MCP_CONFIG", "/root/n8n-integration/.claude/mcp.json")
+SKILLS_DIR = os.environ.get("SKILLS_DIR", "/root/.skills-global/skills-global")
+KIMI_BIN = os.environ.get("KIMI_BIN", "/root/.local/bin/kimi")
+NOTIFICATION_EMAIL = os.environ.get("NOTIFICATION_EMAIL", "your-email@example.com")
 
 # Setup logging
 logging.basicConfig(
@@ -71,7 +73,7 @@ YOUR TASK:
    - Do NOT use docker commands - connect directly via MCP
    - Use your n8n skills to guide your work
 4. If NOT FIXABLE:
-   - Use your gmail-send skill to notify valtteri.melkko@gmail.com
+   - Use your gmail-send skill to notify {NOTIFICATION_EMAIL}
    - Subject: "n8n Workflow Error - Manual Fix Required: {error_data.workflow_name}"
    - Include the error details and why it couldn't be auto-fixed
 

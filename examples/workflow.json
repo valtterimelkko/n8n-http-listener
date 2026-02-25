@@ -1,0 +1,99 @@
+{
+  "name": "Global Error Handler - Kimi Auto-Heal",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 0],
+      "id": "error-trigger-1",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the error data from the Error Trigger node's input.\nconst errorData = $input.item.json;\n\n// Extract error information\nconst workflowId = errorData.workflow?.id || 'unknown';\nconst workflowName = errorData.workflow?.name || 'Unknown Workflow';\nconst failedNode = errorData.lastNodeExecuted?.name || 'Unknown Node';\nconst errorMessage = errorData.execution?.error?.message || 'An unknown error occurred.';\nconst executionId = errorData.execution?.id || 'unknown';\nconst executionUrl = errorData.execution?.url || '';\n\n// Prepare data for HTTP Request and Email fallback\nreturn [{\n  json: {\n    workflow_id: workflowId,\n    workflow_name: workflowName,\n    failed_node: failedNode,\n    error_message: errorMessage,\n    execution_id: executionId,\n    execution_url: executionUrl,\n    // Email fallback data - UPDATE THIS EMAIL\n    email: 'your-email@example.com',\n    failedWorkflow: workflowName,\n    failedNode: failedNode,\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "id": "prepare-data-1",
+      "name": "Prepare Error Data"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:9876/fix-workflow",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "workflow_id": "={{ $json.workflow_id }}",
+          "workflow_name": "={{ $json.workflow_name }}",
+          "failed_node": "={{ $json.failed_node }}",
+          "error_message": "={{ $json.error_message }}",
+          "execution_id": "={{ $json.execution_id }}",
+          "execution_url": "={{ $json.execution_url }}"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0],
+      "id": "http-request-1",
+      "name": "Call Kimi Auto-Heal"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $json.email }}",
+        "toEmail": "={{ $json.email }}",
+        "subject": "=n8n Workflow Error - Kimi Auto-Heal Failed: {{ $json.workflow_name }}",
+        "message": "=<h3>Workflow Error - Auto-Heal Failed or Unfixable</h3><p>An error occurred in your n8n workflow and Kimi CLI was unable to automatically fix it.</p><ul><li><b>Workflow:</b> {{ $json.workflow_name }}</li><li><b>Failed Node:</b> {{ $json.failed_node }}</li><li><b>Error:</b> {{ $json.error_message }}</li></ul><p>Please check the workflow manually.</p>",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [660, 200],
+      "id": "email-fallback-1",
+      "name": "Send Fallback Email"
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Error Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Error Data": {
+      "main": [
+        [
+          {
+            "node": "Call Kimi Auto-Heal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Kimi Auto-Heal": {
+      "main": [
+        [
+          {
+            "node": "Send Fallback Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
