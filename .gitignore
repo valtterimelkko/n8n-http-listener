@@ -1,0 +1,74 @@
+# Security-focused .gitignore for n8n-http-listener
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Environment files (security critical)
+.env
+.env.local
+.env.*.local
+*.env
+
+# Credentials and secrets (NEVER commit these)
+*credential*
+*secret*
+*password*
+*token*
+*key*
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# MCP config (contains API keys)
+.claude/mcp.json
+mcp.json
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
