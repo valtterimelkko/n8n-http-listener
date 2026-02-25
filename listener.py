@@ -23,6 +23,7 @@ KIMI_TIMEOUT_SECONDS = 600  # 10 minutes max for Kimi to fix
 
 # Paths
 MCP_CONFIG = "/root/n8n-integration/.claude/mcp.json"
+SKILLS_DIR = "/root/.skills-global/skills-global"
 KIMI_BIN = "/root/.local/bin/kimi"
 
 # Setup logging
@@ -92,10 +93,11 @@ def spawn_kimi(prompt: str) -> dict:
         "--quiet",  # Non-interactive mode
         "--yolo",   # Auto-approve all tool calls
         "--mcp-config-file", MCP_CONFIG,
+        "--skills-dir", SKILLS_DIR,
         "--prompt", prompt,
     ]
     
-    logger.info(f"Spawning Kimi CLI: {' '.join(cmd[:6])}...")
+    logger.info(f"Spawning Kimi CLI with MCP and skills directory...")
     
     try:
         result = subprocess.run(
