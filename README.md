@@ -1,6 +1,15 @@
 # n8n Auto-Heal HTTP Listener
 
-HTTP listener service that receives webhook calls from n8n error workflows and automatically spawns an LLM CLI (Kimi, Claude Code, etc.) to analyze and fix the errors.
+HTTP listener service that receives webhook calls from n8n error workflows and automatically spawns Kimi CLI to analyze and fix the errors.
+
+## What is this for and who is this for? Any dependencies?
+
+
+This repo is for a tech stack where one hosts a self-hosted n8n instance, uses Kimi Code CLI tool. However, it could be modified with minimal effort to function using any other code agent tool, Claude Code, Codex, Gemini CLI, OpenCode, Kilo Code, an others (just the shell command and the flags used need to be changed). 
+
+One also needs to have set up the n8n-mcp (https://github.com/czlonkowski/n8n-mcp) and the skills related to that (https://github.com/czlonkowski/n8n-skills) and make sure those are fully installed on their agent. The main repo is the HTTP listener service that receives webhook calls from n8n error workflows and automatically spawns Kimi CLI to analyze and fix the errors. 
+
+One needs to set up a global error workflow at their n8n instance - and connect that to their workflows in production - and this becomes a self-healing system where the agent is able to autonomously try to fix the errors in the workflows. The agent, with the n8n-mcp server and the skills, is able to create the error workflow for you - but you need to set the error workflow connection manually. There's an example JSON of an error workflow that works together with the HTTP listener in this repo as well.
 
 ## Overview
 
