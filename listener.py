@@ -21,6 +21,45 @@ PORT = 9876
 HOST = "0.0.0.0"
 LOG_FILE = "/var/log/n8n-auto-heal.log"
 KIMI_TIMEOUT_SECONDS = 600  # 10 minutes max for Kimi to fix
+MAX_FIX_ATTEMPTS = int(os.environ.get("MAX_FIX_ATTEMPTS", "20"))  # Max attempts before giving up
+ATTEMPTS_FILE = "/root/n8n-http-listener/.attempts.json"
+
+
+def load_attempts() -> dict:
+    """Load attempt counter from file"""
+    if os.path.exists(ATTEMPTS_FILE):
+        try:
+            with open(ATTEMPTS_FILE) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            return {}
+    return {}
+
+
+def save_attempts(attempts: dict):
+    """Save attempt counter to file"""
+    try:
+        with open(ATTEMPTS_FILE, 'w') as f:
+            json.dump(attempts, f, indent=2)
+    except IOError as e:
+        logger.error(f"Failed to save attempts: {e}")
+
+
+def increment_attempt(workflow_id: str) -> int:
+    """Increment attempt counter for workflow, return new count"""
+    attempts = load_attempts()
+    current = attempts.get(workflow_id, 0)
+    attempts[workflow_id] = current + 1
+    save_attempts(attempts)
+    return attempts[workflow_id]
+
+
+def reset_attempts(workflow_id: str):
+    """Reset attempt counter for workflow (when fixed successfully)"""
+    attempts = load_attempts()
+    if workflow_id in attempts:
+        del attempts[workflow_id]
+        save_attempts(attempts)
 
 def load_env_file(filepath="/root/n8n-http-listener/.env"):
     """Load environment variables from .env file"""
@@ -65,8 +104,41 @@ class WorkflowError(BaseModel):
     execution_url: str = ""
 
 
-def build_kimi_prompt(error_data: WorkflowError) -> str:
+def build_kimi_prompt(error_data: WorkflowError, skip_fix: bool = False, attempt_count: int = 1) -> str:
     """Build the prompt for Kimi CLI"""
+    
+    if skip_fix:
+        # Max attempts exceeded - just notify
+        return f"""You are an n8n workflow repair agent. A workflow has failed with an error.
+
+ERROR DETAILS:
+- Workflow ID: {error_data.workflow_id}
+- Workflow Name: {error_data.workflow_name}
+- Failed Node: {error_data.failed_node}
+- Error Message: {error_data.error_message}
+- Execution ID: {error_data.execution_id}
+- Execution URL: {error_data.execution_url}
+- Fix Attempts: {attempt_count} (MAX EXCEEDED - giving up on auto-fix)
+
+YOUR TASK:
+This workflow has been auto-healed {attempt_count} times without success.
+STOP trying to fix it - just notify the user.
+
+Use your gmail-send skill to notify {NOTIFICATION_EMAIL}
+- Subject: "n8n Workflow Error - MAX FIX ATTEMPTS EXCEEDED: {error_data.workflow_name}"
+- Include: workflow name, error details, execution URL, and note that {attempt_count} fix attempts were made
+
+REQUIREMENTS:
+- Do NOT try to fix the workflow - just send the email notification
+- Do NOT use docker commands
+- Return a JSON summary of what you did
+
+OUTPUT FORMAT:
+Return ONLY a JSON object like:
+{{"success": true/false, "action": "notified_max_attempts", "details": "..."}}
+"""
+    
+    # Normal prompt with attempt tracking
     return f"""You are an n8n workflow repair agent. A workflow has failed with an error.
 
 ERROR DETAILS:
@@ -76,6 +148,7 @@ ERROR DETAILS:
 - Error Message: {error_data.error_message}
 - Execution ID: {error_data.execution_id}
 - Execution URL: {error_data.execution_url}
+- Fix Attempt: #{attempt_count} (max {MAX_FIX_ATTEMPTS} before giving up)
 
 YOUR TASK:
 1. Use your n8n skills available to you to examine the workflow - make sure you connect to the n8n-mcp directly, do not use docker commands or similar
@@ -179,11 +252,25 @@ async def fix_workflow(error: WorkflowError):
     logger.info(f"Failed node: {error.failed_node}")
     logger.info(f"Error: {error.error_message[:200]}...")
     
-    # Build prompt for Kimi
-    prompt = build_kimi_prompt(error)
+    # Check attempt count
+    attempt_count = increment_attempt(error.workflow_id)
+    logger.info(f"Fix attempt #{attempt_count} for workflow {error.workflow_id}")
+    
+    if attempt_count > MAX_FIX_ATTEMPTS:
+        logger.warning(f"Max attempts ({MAX_FIX_ATTEMPTS}) exceeded for workflow {error.workflow_id}")
+        # Build special prompt that skips fix and just notifies
+        prompt = build_kimi_prompt(error, skip_fix=True, attempt_count=attempt_count)
+    else:
+        # Build normal prompt for fixing
+        prompt = build_kimi_prompt(error, attempt_count=attempt_count)
     
     # Spawn Kimi CLI
     result = spawn_kimi(prompt)
+    
+    # Reset attempts if successfully fixed
+    if result.get("action") == "fixed" and result.get("success"):
+        reset_attempts(error.workflow_id)
+        logger.info(f"Workflow {error.workflow_id} fixed successfully - reset attempt counter")
     
     logger.info(f"Kimi result: {result}")
     
@@ -192,6 +279,8 @@ async def fix_workflow(error: WorkflowError):
             "status": "fix_attempted",
             "workflow_id": error.workflow_id,
             "workflow_name": error.workflow_name,
+            "attempt_count": attempt_count,
+            "max_attempts": MAX_FIX_ATTEMPTS,
             "kimi_result": result,
             "timestamp": datetime.utcnow().isoformat(),
         }
