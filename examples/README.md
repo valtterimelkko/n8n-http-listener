@@ -39,19 +39,40 @@ Example environment variables file.
    sudo systemctl start n8n-auto-heal.service
    ```
 
+## Docker Networking
+
+### Linux Docker (Production Servers)
+
+`host.docker.internal` doesn't work on Linux Docker by default. Use the Docker network gateway IP:
+
+```bash
+# Find your n8n container's network gateway
+docker network inspect n8n-docker-caddy_default | grep Gateway
+# Example: "Gateway": "172.18.0.1"
+```
+
+Update the HTTP Request node URL to:
+- `http://172.18.0.1:9876/fix-workflow`
+
+**Firewall:** Ensure port 9876 is open from Docker networks:
+```bash
+sudo ufw allow from 172.18.0.0/16 to any port 9876 comment "n8n Auto-Heal"
+```
+
+### Docker Desktop (Mac/Windows)
+
+Use `host.docker.internal:9876` - it works automatically.
+
+### Non-Docker n8n
+
+If n8n runs directly on the host, use:
+- `http://localhost:9876/fix-workflow`
+
 ## Customization
 
 ### Changing the Port
 
 Edit `listener.py` and change the `PORT` variable (default: 9876).
-
-### Non-Docker n8n
-
-If n8n runs directly on the host (not in Docker), change the URL in the HTTP Request node from:
-- `http://host.docker.internal:9876/fix-workflow`
-
-To:
-- `http://localhost:9876/fix-workflow`
 
 ### Different LLM CLI
 

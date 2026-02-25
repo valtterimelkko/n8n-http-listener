@@ -23,6 +23,7 @@
       "parameters": {
         "method": "POST",
         "url": "http://host.docker.internal:9876/fix-workflow",
+        "_url_comment": "For Linux Docker: use gateway IP from 'docker network inspect <network>' e.g., http://172.18.0.1:9876/fix-workflow"
         "sendBody": true,
         "contentType": "json",
         "body": {
