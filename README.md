@@ -19,6 +19,10 @@ This service enables **self-healing n8n workflows** by:
 3. Attempting to automatically fix the workflow
 4. Notifying via email if the error cannot be auto-fixed
 
+## How to adopt this into your own use?
+
+For security purposes, all the references to my own server and real examples have been removed from here - and not with a placeholder system that works like: "add your personal server details in config file X and it all works then". However you can give the repo's URL to your favourite coding agent (Claude Code, Codex, OpenCode, Kilo Code, Kimi Code, you name it) and say you want to copy the repo into a a folder, adopt it to your own n8n instance running from a Docker (insert the folder it's running from) and its public URL (give the URL) - and adopt it to the command line commands of your favourite CLI coding agent tool. Ask it to autonomously build and adopt the package, test the HTTP listener works, and then, using the n8n-mcp, first make sure you have a global error workflow in place, adopt that to use this HTTP listener to start the self-healing process - and then, using the same MCP, build a test workflow that's intentionally broken and is being triggered every 10 minutes. You can then publish that workflow manually, connect it to the global error workflow, and wait for it to be triggered (manually triggered workflows don't trigger error workflows). Then, when the workflow is being triggered, but you can ask your agent to see the logs of the HTTP listener whether it gets the calls from your n8n, see if the agent fixed the workflow using the n8n-mcp again - and ask your agent to go back&forth with you to debug if it doesn't work - until it works.
+
 ## Architecture
 
 ```
