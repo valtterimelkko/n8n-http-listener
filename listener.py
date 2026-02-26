@@ -166,6 +166,7 @@ YOUR TASK:
 REQUIREMENTS:
 - Connect to n8n via the configured n8n-mcp server (direct connection)
 - Do NOT run docker exec commands or similar
+- Try to avoid n8n_executions with includeData: true as it returns the full workflow content for all the workflows, which is extremely verbose and fills the context unnecessarily
 - Return a JSON summary of what you did
 
 OUTPUT FORMAT:
