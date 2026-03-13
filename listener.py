@@ -252,9 +252,10 @@ async def save_file_json(request: Request):
         filename = body.get("filename", "unnamed_file")
         subfolder = body.get("subfolder", "")
         content_base64 = body.get("content_base64")
+        content_raw = body.get("content")
         
-        if not content_base64:
-            raise HTTPException(status_code=400, detail="Missing content_base64 field")
+        if not content_base64 and content_raw is None:
+            raise HTTPException(status_code=400, detail="Missing content_base64 or content field")
         
         # Determine the target directory
         if subfolder:
@@ -277,8 +278,11 @@ async def save_file_json(request: Request):
         file_path = os.path.join(target_dir, final_filename)
         
         # Decode and save
-        import base64
-        content = base64.b64decode(content_base64)
+        if content_base64:
+            import base64
+            content = base64.b64decode(content_base64)
+        else:
+            content = content_raw.encode('utf-8')
         with open(file_path, "wb") as f:
             f.write(content)
         
