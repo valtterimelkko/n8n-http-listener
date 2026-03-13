@@ -2,6 +2,7 @@
 """
 n8n Auto-Heal HTTP Listener
 Receives webhook calls from n8n error workflows and spawns Kimi CLI to fix them.
+Also provides file storage endpoint for n8n workflows to save files to disk.
 """
 
 import json
@@ -9,10 +10,12 @@ import logging
 import os
 import subprocess
 import sys
+import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -23,6 +26,10 @@ LOG_FILE = "/var/log/n8n-auto-heal.log"
 KIMI_TIMEOUT_SECONDS = 600  # 10 minutes max for Kimi to fix
 MAX_FIX_ATTEMPTS = int(os.environ.get("MAX_FIX_ATTEMPTS", "20"))  # Max attempts before giving up
 ATTEMPTS_FILE = "/root/n8n-http-listener/.attempts.json"
+
+# File storage configuration
+FILE_STORAGE_PATH = os.environ.get("FILE_STORAGE_PATH", "/mnt/n8n-file-bridge")
+API_KEY = os.environ.get("API_KEY", None)  # Set this in .env for security
 
 
 def load_attempts() -> dict:
@@ -61,6 +68,7 @@ def reset_attempts(workflow_id: str):
         del attempts[workflow_id]
         save_attempts(attempts)
 
+
 def load_env_file(filepath="/root/n8n-http-listener/.env"):
     """Load environment variables from .env file"""
     if os.path.exists(filepath):
@@ -71,6 +79,7 @@ def load_env_file(filepath="/root/n8n-http-listener/.env"):
                     key, value = line.split('=', 1)
                     os.environ.setdefault(key, value)
 
+
 # Load .env file
 load_env_file()
 
@@ -79,6 +88,10 @@ MCP_CONFIG = os.environ.get("MCP_CONFIG", "/root/n8n-integration/.claude/mcp.jso
 SKILLS_DIR = os.environ.get("SKILLS_DIR", "/root/.skills-global/skills-global")
 KIMI_BIN = os.environ.get("KIMI_BIN", "/root/.local/bin/kimi")
 NOTIFICATION_EMAIL = os.environ.get("NOTIFICATION_EMAIL", "your-email@example.com")
+API_KEY = os.environ.get("API_KEY", API_KEY)  # Reload after loading .env
+
+# Ensure file storage directory exists
+os.makedirs(FILE_STORAGE_PATH, exist_ok=True)
 
 # Setup logging
 logging.basicConfig(
@@ -91,7 +104,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("n8n-auto-heal")
 
-app = FastAPI(title="n8n Auto-Heal Listener", version="1.0.0")
+app = FastAPI(title="n8n Auto-Heal Listener", version="1.1.0")
 
 
 class WorkflowError(BaseModel):
@@ -102,6 +115,200 @@ class WorkflowError(BaseModel):
     error_message: str
     execution_id: str
     execution_url: str = ""
+
+
+def verify_api_key(request: Request):
+    """Verify API key from header if one is configured"""
+    if not API_KEY:
+        return True  # No API key required if not set
+    
+    api_key_header = request.headers.get("X-API-Key")
+    if not api_key_header:
+        raise HTTPException(status_code=401, detail="Missing X-API-Key header")
+    
+    if api_key_header != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    
+    return True
+
+
+def sanitize_filename(filename: str) -> str:
+    """Sanitize filename to prevent directory traversal attacks"""
+    # Remove any path components, keep only the filename
+    filename = os.path.basename(filename)
+    # Remove any potentially dangerous characters
+    filename = "".join(c for c in filename if c.isalnum() or c in "._-")
+    # Ensure we have a filename
+    if not filename:
+        filename = f"file_{uuid.uuid4().hex[:8]}"
+    return filename
+
+
+def sanitize_subfolder(subfolder: str) -> str:
+    """Sanitize subfolder name to prevent directory traversal"""
+    # Remove leading/trailing slashes and dots
+    subfolder = subfolder.strip("/.")
+    # Remove any parent directory references
+    subfolder = subfolder.replace("..", "")
+    # Remove any absolute paths
+    subfolder = subfolder.lstrip("/")
+    return subfolder
+
+
+@app.post("/save-file")
+async def save_file(
+    request: Request,
+    file: UploadFile = File(...),
+    subfolder: str = Form(""),
+    filename: Optional[str] = Form(None),
+):
+    """
+    Receive a file from n8n and save it to disk.
+    
+    - file: The binary file to save
+    - subfolder: Optional subfolder within the storage path
+    - filename: Optional custom filename (if not provided, uses original filename)
+    """
+    # Verify API key if configured
+    verify_api_key(request)
+    
+    try:
+        # Determine the target directory
+        if subfolder:
+            safe_subfolder = sanitize_subfolder(subfolder)
+            target_dir = os.path.join(FILE_STORAGE_PATH, safe_subfolder)
+        else:
+            target_dir = FILE_STORAGE_PATH
+        
+        # Ensure the target directory exists
+        os.makedirs(target_dir, exist_ok=True)
+        
+        # Determine filename
+        if filename:
+            safe_filename = sanitize_filename(filename)
+        else:
+            safe_filename = sanitize_filename(file.filename or "unnamed_file")
+        
+        # Add timestamp prefix to prevent overwrites
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        final_filename = f"{timestamp}_{safe_filename}"
+        
+        # Full path to save the file
+        file_path = os.path.join(target_dir, final_filename)
+        
+        # Save the file
+        content = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(content)
+        
+        file_size = len(content)
+        
+        logger.info(f"File saved: {file_path} ({file_size} bytes)")
+        
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "File saved successfully",
+                "saved_path": file_path,
+                "relative_path": os.path.relpath(file_path, FILE_STORAGE_PATH),
+                "filename": final_filename,
+                "size_bytes": file_size,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving file: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": f"Failed to save file: {str(e)}",
+            }
+        )
+
+
+@app.post("/save-file-json")
+async def save_file_json(request: Request):
+    """
+    Alternative endpoint for saving base64-encoded files from JSON payload.
+    Useful when n8n can't easily send multipart/form-data.
+    
+    Expected JSON body:
+    {
+        "filename": "myfile.txt",
+        "subfolder": "optional/subfolder",
+        "content_base64": "base64_encoded_content_here"
+    }
+    """
+    # Verify API key if configured
+    verify_api_key(request)
+    
+    try:
+        body = await request.json()
+        
+        filename = body.get("filename", "unnamed_file")
+        subfolder = body.get("subfolder", "")
+        content_base64 = body.get("content_base64")
+        
+        if not content_base64:
+            raise HTTPException(status_code=400, detail="Missing content_base64 field")
+        
+        # Determine the target directory
+        if subfolder:
+            safe_subfolder = sanitize_subfolder(subfolder)
+            target_dir = os.path.join(FILE_STORAGE_PATH, safe_subfolder)
+        else:
+            target_dir = FILE_STORAGE_PATH
+        
+        # Ensure the target directory exists
+        os.makedirs(target_dir, exist_ok=True)
+        
+        # Sanitize filename
+        safe_filename = sanitize_filename(filename)
+        
+        # Add timestamp prefix
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        final_filename = f"{timestamp}_{safe_filename}"
+        
+        # Full path
+        file_path = os.path.join(target_dir, final_filename)
+        
+        # Decode and save
+        import base64
+        content = base64.b64decode(content_base64)
+        with open(file_path, "wb") as f:
+            f.write(content)
+        
+        file_size = len(content)
+        
+        logger.info(f"File saved via JSON: {file_path} ({file_size} bytes)")
+        
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "File saved successfully",
+                "saved_path": file_path,
+                "relative_path": os.path.relpath(file_path, FILE_STORAGE_PATH),
+                "filename": final_filename,
+                "size_bytes": file_size,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving file from JSON: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": f"Failed to save file: {str(e)}",
+            }
+        )
 
 
 def build_kimi_prompt(error_data: WorkflowError, skip_fix: bool = False, attempt_count: int = 1) -> str:
@@ -291,7 +498,13 @@ async def fix_workflow(error: WorkflowError):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "service": "n8n-auto-heal"}
+    return {
+        "status": "healthy",
+        "service": "n8n-auto-heal",
+        "version": "1.1.0",
+        "file_storage_path": FILE_STORAGE_PATH,
+        "api_key_required": API_KEY is not None,
+    }
 
 
 @app.get("/")
@@ -299,8 +512,13 @@ async def root():
     """Root endpoint"""
     return {
         "service": "n8n Auto-Heal Listener",
-        "version": "1.0.0",
-        "endpoints": ["/fix-workflow", "/health"],
+        "version": "1.1.0",
+        "endpoints": [
+            "/fix-workflow",
+            "/save-file",
+            "/save-file-json",
+            "/health",
+        ],
     }
 
 
@@ -308,4 +526,6 @@ if __name__ == "__main__":
     import uvicorn
     
     logger.info(f"Starting n8n Auto-Heal Listener on {HOST}:{PORT}")
+    logger.info(f"File storage path: {FILE_STORAGE_PATH}")
+    logger.info(f"API key required: {API_KEY is not None}")
     uvicorn.run(app, host=HOST, port=PORT, log_level="info")

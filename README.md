@@ -13,11 +13,19 @@ One needs to set up a global error workflow at their n8n instance - and connect 
 
 ## Overview
 
-This service enables **self-healing n8n workflows** by:
-1. Listening for error notifications from n8n on port 9876
-2. Spawning an LLM CLI with MCP tools to analyze the error
-3. Attempting to automatically fix the workflow
-4. Notifying via email if the error cannot be auto-fixed
+This service provides two main capabilities:
+
+### 1. Self-Healing n8n Workflows
+- Listens for error notifications from n8n on port 9876
+- Spawns an LLM CLI with MCP tools to analyze the error
+- Attempts to automatically fix the workflow
+- Notifies via email if the error cannot be auto-fixed
+
+### 2. File Storage for n8n Workflows
+- Provides HTTP endpoints for n8n workflows to save files to disk
+- Bypasses n8n's task runner sandboxing restrictions
+- Supports subfolders for organizing files by workflow/purpose
+- API key authentication for security
 
 ## How to adopt this into your own use?
 
@@ -141,6 +149,56 @@ Receives error data from n8n and triggers the LLM CLI.
 }
 ```
 
+### POST /save-file
+
+Receive a file from n8n and save it to disk. Bypasses n8n's task runner sandboxing.
+
+**Headers:**
+```
+X-API-Key: your-api-key-here  # Required if API_KEY is configured
+Content-Type: multipart/form-data
+```
+
+**Request Body (multipart/form-data):**
+- `file` (required): The binary file to save
+- `subfolder` (optional): Subfolder within the storage path (e.g., "gdrive-files", "exports/2024")
+- `filename` (optional): Custom filename (if not provided, uses original filename)
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "File saved successfully",
+  "saved_path": "/mnt/n8n-file-bridge/20240313_143052_document.pdf",
+  "relative_path": "20240313_143052_document.pdf",
+  "filename": "20240313_143052_document.pdf",
+  "size_bytes": 15420,
+  "timestamp": "2024-03-13T14:30:52.123456"
+}
+```
+
+### POST /save-file-json
+
+Alternative endpoint for saving base64-encoded files from JSON payload.
+Useful when n8n can't easily send multipart/form-data.
+
+**Headers:**
+```
+X-API-Key: your-api-key-here  # Required if API_KEY is configured
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "filename": "document.pdf",
+  "subfolder": "gdrive-files",
+  "content_base64": "JVBERi0xLjQKJdPr6eEKMSAwIG9iago8PAovVHlw..."
+}
+```
+
+**Response:** Same as `/save-file`
+
 ### GET /health
 
 Health check endpoint.
@@ -149,7 +207,10 @@ Health check endpoint.
 ```json
 {
   "status": "healthy",
-  "service": "n8n-auto-heal"
+  "service": "n8n-auto-heal",
+  "version": "1.1.0",
+  "file_storage_path": "/mnt/n8n-file-bridge",
+  "api_key_required": true
 }
 ```
 
@@ -220,6 +281,33 @@ ls -la $MCP_CONFIG
 
 2. Check listener logs for Kimi CLI output
 
+## File Storage Security
+
+### API Key Authentication
+
+The file storage endpoints (`/save-file`, `/save-file-json`) support API key authentication to prevent unauthorized access.
+
+**Configuration:**
+1. Set `API_KEY` in your `.env` file:
+   ```bash
+   API_KEY=your-secure-random-key-here
+   ```
+2. Include the key in requests via the `X-API-Key` header
+
+**Security Features:**
+- Filename sanitization to prevent directory traversal attacks
+- Subfolder path sanitization (removes `..` and absolute paths)
+- Automatic timestamp prefix to prevent file overwrites
+- Files are saved to a sandboxed directory (`/mnt/n8n-file-bridge` by default)
+
+### Why This is Needed
+
+n8n v2.x introduced **task runner sandboxing** that prevents workflows from writing files to disk, even with correct Docker volume permissions. This HTTP listener provides a secure workaround by:
+1. Running outside n8n's sandbox environment
+2. Validating and sanitizing all inputs
+3. Requiring API key authentication
+4. Limiting writes to a specific directory
+
 ## Security Considerations
 
 - Service typically runs as root (for CLI access)
@@ -227,6 +315,7 @@ ls -la $MCP_CONFIG
 - Gmail App Passwords should be used (not main password)
 - MCP config contains API keys - restrict file permissions
 - Store credentials in `.env` file (gitignored)
+- **File Storage**: Set a strong `API_KEY` to prevent unauthorized file uploads
 
 ## Docker Considerations
 
