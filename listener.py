@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 # Configuration
 PORT = 9876
-HOST = "0.0.0.0"
+HOST = "172.18.0.1"
 LOG_FILE = "/var/log/n8n-auto-heal.log"
 KIMI_TIMEOUT_SECONDS = 600  # 10 minutes max for Kimi to fix
 MAX_FIX_ATTEMPTS = int(os.environ.get("MAX_FIX_ATTEMPTS", "20"))  # Max attempts before giving up
@@ -341,7 +341,7 @@ Use your gmail-send skill to notify {NOTIFICATION_EMAIL}
 
 REQUIREMENTS:
 - Do NOT try to fix the workflow - just send the email notification
-- Do NOT use docker commands
+- Do NOT use docker commands or docker exec
 - Return a JSON summary of what you did
 
 OUTPUT FORMAT:
@@ -362,22 +362,20 @@ ERROR DETAILS:
 - Fix Attempt: #{attempt_count} (max {MAX_FIX_ATTEMPTS} before giving up)
 
 YOUR TASK:
-1. Use your n8n skills available to you to examine the workflow - make sure you connect to the n8n-mcp directly, do not use docker commands or similar
+1. Use your n8n-official-mcp skill to examine the workflow. Connect directly via MCP — do NOT use docker commands, docker exec, or any shell commands to interact with n8n.
 2. Analyze the error and determine if it's fixable (code errors, logic issues, etc.)
    vs. unfixable (expired credentials, rate limits, third-party outages)
 3. If FIXABLE:
-   - Use n8n-mcp tools (n8n_get_workflow, n8n_update_partial_workflow, etc.) to fix it
-   - Do NOT use docker commands - connect directly via MCP
-   - Use your n8n skills to guide your work
+   - Use your n8n-official-mcp skill to inspect the workflow and apply the necessary fix.
+   - Do NOT use docker commands — interact with n8n only through the MCP skill.
 4. If NOT FIXABLE:
    - Use your gmail-send skill to notify {NOTIFICATION_EMAIL}
    - Subject: "n8n Workflow Error - Manual Fix Required: {error_data.workflow_name}"
    - Include the error details and why it couldn't be auto-fixed
 
 REQUIREMENTS:
-- Connect to n8n via the configured n8n-mcp server (direct connection)
-- Do NOT run docker exec commands or similar
-- Try to avoid n8n_executions with includeData: true as it returns the full workflow content for all the workflows, which is extremely verbose and fills the context unnecessarily
+- Use the n8n-official-mcp skill for all n8n interactions.
+- Do NOT run docker exec commands or similar.
 - Return a JSON summary of what you did
 
 OUTPUT FORMAT:
