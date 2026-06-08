@@ -1,5 +1,9 @@
 # n8n Auto-Heal HTTP Listener
 
+> ⚠️ **CURRENT STATUS: DISABLED** — This service has been taken down and the systemd service (`n8n-auto-heal.service`) has been stopped, disabled, and removed. The HTTP listener is no longer running on port 9876.
+>
+> The code and configuration are preserved here for future re-enablement. To restore, re-deploy the systemd service (see below), ensure the KIMI_BIN path in `.env` is correct, and re-connect the n8n global error workflow.
+
 HTTP listener service that receives webhook calls from n8n error workflows and automatically spawns Kimi CLI to analyze and fix the errors.
 
 ## What is this for and who is this for? Any dependencies?
